@@ -75,7 +75,7 @@
       "phase": "AI Creative Director — Intent Layer",
       "title": "Intent input interface",
       "description": "Primary creation entry point — replaces 'open file and start editing'. Full-screen modal on project create: (1) Upload footage area (drag or phone upload QR). (2) Intent field: text input OR voice recording. Examples: 'Make a 60s TikTok hook from my gym footage, high energy, trending sound', 'YouTube tutorial intro, professional, under 30s'. (3) Platform selector: TikTok / Reels / YouTube Shorts / YouTube / LinkedIn / X. (4) Vibe selector: 5 mood tiles (Hype / Chill / Professional / Funny / Emotional). AI uses all 4 inputs to generate first edit draft.",
-      "status": "red",
+      "status": "green",
       "files_to_write": ["apps/web/components/IntentModal.tsx", "apps/web/components/VibePicker.tsx", "backend/services/IntentParserService.ts"]
     },
     {
