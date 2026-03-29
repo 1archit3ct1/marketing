@@ -83,7 +83,7 @@
       "phase": "AI Creative Director — Intent Layer",
       "title": "AI edit draft generator",
       "description": "POST /api/ai/generate-draft: accept {intent_text, platform, vibe, asset_ids[]}. Pipeline: (1) IntentParserService → extract: target_duration, energy_level, content_type, key_moments_requested. (2) SceneAnalysisService → analyze all clips: detect faces, action, quality score, audio energy per second. (3) DraftComposerService → select best segments to fill target_duration, order by energy arc (hook → build → payoff), insert auto-cuts on beats, apply platform aspect ratio, apply vibe LUT preset, generate caption track from ASR. (4) Return full timeline_state JSON. Frontend renders draft in preview. User sees: 'Your draft is ready' with 3 variant cards to choose from.",
-      "status": "red",
+      "status": "green",
       "files_to_write": ["backend/services/IntentParserService.ts", "backend/services/SceneAnalysisService.py", "backend/services/DraftComposerService.py", "backend/routes/ai-draft.ts"]
     },
     {
