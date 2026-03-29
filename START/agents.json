@@ -91,7 +91,7 @@
       "phase": "AI Creative Director — Intent Layer",
       "title": "3 draft variants system",
       "description": "DraftComposerService generates 3 distinct variants per intent: Variant A (safe/proven structure for platform), Variant B (experimental/trend-chasing), Variant C (minimal/clean). Each rendered to 720p preview clip server-side. Frontend: 3 side-by-side preview cards, auto-plays on hover. User clicks one → loads into editor. Or: 'Generate more' → 3 new variants.",
-      "status": "red",
+      "status": "green",
       "files_to_write": ["backend/services/DraftVariantService.py", "apps/web/components/DraftVariantPicker.tsx"]
     },
     {

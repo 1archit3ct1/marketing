@@ -1,0 +1,626 @@
+"""
+AURA Draft Variant Service
+Generates and manages 3 distinct draft variants per intent
+
+Variants:
+- Variant A (Safe): Proven structure for platform, follows best practices
+- Variant B (Experimental): Trend-chasing, bold choices, dynamic edits
+- Variant C (Minimal): Clean, straightforward, less is more
+"""
+
+import json
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, asdict
+from datetime import datetime
+import numpy as np
+
+from .DraftComposerService import DraftComposerService, DraftVariant, DraftTimeline
+
+
+@dataclass
+class VariantConfig:
+    """Configuration for a variant type"""
+    type: str
+    name: str
+    description: str
+    badge: str
+    energy_arc: List[float]
+    cut_frequency: float  # cuts per minute
+    transition_style: str
+    caption_style: str
+    color_grade: Dict[str, float]
+    audio_mix: Dict[str, float]
+
+
+class DraftVariantService:
+    """
+    Manages generation and comparison of draft variants
+    """
+    
+    # Variant configurations
+    VARIANT_CONFIGS = {
+        'safe': VariantConfig(
+            type='safe',
+            name='Safe & Proven',
+            description='Follows platform best practices and proven patterns',
+            badge='Proven',
+            energy_arc=[0.7, 0.75, 0.8, 0.85, 0.9, 0.85, 0.8],  # Consistent build
+            cut_frequency=15,  # 15 cuts per minute
+            transition_style='dissolve',
+            caption_style='tiktok_bold',
+            color_grade={'saturation': 1.1, 'contrast': 1.05, 'vibrance': 1.1},
+            audio_mix={'voice': 1.0, 'music': 0.3, 'sfx': 0.5}
+        ),
+        'experimental': VariantConfig(
+            type='experimental',
+            name='Experimental',
+            description='Trend-chasing with bold choices and dynamic edits',
+            badge='Trending',
+            energy_arc=[0.9, 0.4, 0.85, 0.5, 1.0, 0.6, 0.95],  # Dynamic swings
+            cut_frequency=35,  # 35 cuts per minute (fast!)
+            transition_style='dynamic',  # Mix of zooms, glitches, whips
+            caption_style='karaoke',
+            color_grade={'saturation': 1.3, 'contrast': 1.15, 'vibrance': 1.2},
+            audio_mix={'voice': 1.0, 'music': 0.5, 'sfx': 0.8}
+        ),
+        'minimal': VariantConfig(
+            type='minimal',
+            name='Minimal',
+            description='Clean and straightforward, less is more',
+            badge='Clean',
+            energy_arc=[0.5, 0.55, 0.6, 0.65, 0.7, 0.65, 0.6],  # Subtle progression
+            cut_frequency=8,  # 8 cuts per minute (slow)
+            transition_style='cut',  # Just hard cuts
+            caption_style='minimal',
+            color_grade={'saturation': 0.95, 'contrast': 1.0, 'vibrance': 0.95},
+            audio_mix={'voice': 1.0, 'music': 0.2, 'sfx': 0.3}
+        )
+    }
+    
+    def __init__(self):
+        self.composer = DraftComposerService()
+    
+    def generate_all_variants(
+        self,
+        intent: Dict[str, Any],
+        clip_analyses: List[Any]
+    ) -> List[DraftVariant]:
+        """
+        Generate all 3 variants with distinct characteristics
+        
+        Args:
+            intent: Parsed intent with platform, vibe, etc.
+            clip_analyses: Analyzed clips from SceneAnalysisService
+            
+        Returns:
+            List of 3 DraftVariants
+        """
+        variants = []
+        
+        for variant_type in ['safe', 'experimental', 'minimal']:
+            variant = self._generate_variant(
+                intent,
+                clip_analyses,
+                variant_type
+            )
+            variants.append(variant)
+        
+        return variants
+    
+    def _generate_variant(
+        self,
+        intent: Dict[str, Any],
+        clip_analyses: List[Any],
+        variant_type: str
+    ) -> DraftVariant:
+        """Generate a single variant with specific characteristics"""
+        
+        config = self.VARIANT_CONFIGS.get(variant_type, self.VARIANT_CONFIGS['safe'])
+        
+        # Start with base draft from composer
+        base_variant = self.composer.compose_draft(
+            intent,
+            clip_analyses,
+            variant_type
+        )
+        
+        # Apply variant-specific modifications
+        modified_timeline = self._apply_variant_modifications(
+            base_variant.timeline,
+            config,
+            intent
+        )
+        
+        # Recalculate engagement score based on variant
+        engagement_score = self._calculate_variant_engagement(
+            modified_timeline,
+            clip_analyses,
+            config
+        )
+        
+        return DraftVariant(
+            id=f"variant_{variant_type}_{datetime.now().isoformat()}",
+            type=variant_type,
+            timeline=modified_timeline,
+            engagement_score=engagement_score,
+            preview_url=None,  # Would be generated by render service
+            created_at=datetime.now().isoformat()
+        )
+    
+    def _apply_variant_modifications(
+        self,
+        timeline: DraftTimeline,
+        config: VariantConfig,
+        intent: Dict[str, Any]
+    ) -> DraftTimeline:
+        """Apply variant-specific modifications to timeline"""
+        
+        # Modify clips based on cut frequency
+        modified_clips = self._adjust_cut_frequency(
+            timeline.clips,
+            config.cut_frequency,
+            timeline.duration
+        )
+        
+        # Apply transition style
+        modified_clips = self._apply_transitions(
+            modified_clips,
+            config.transition_style
+        )
+        
+        # Apply color grade
+        modified_clips = self._apply_color_grade(
+            modified_clips,
+            config.color_grade
+        )
+        
+        # Update timeline with modifications
+        return DraftTimeline(
+            duration=timeline.duration,
+            fps=timeline.fps,
+            width=timeline.width,
+            height=timeline.height,
+            clips=modified_clips,
+            tracks=timeline.tracks,
+            captions=self._adjust_captions(timeline.captions, config.caption_style),
+            audio_tracks=self._adjust_audio_mix(timeline.audio_tracks, config.audio_mix),
+            metadata={
+                **timeline.metadata,
+                'variant_config': asdict(config)
+            }
+        )
+    
+    def _adjust_cut_frequency(
+        self,
+        clips: List[Any],
+        target_cuts_per_minute: float,
+        duration_ms: int
+    ) -> List[Any]:
+        """Adjust number of cuts based on variant"""
+        if not clips:
+            return clips
+        
+        duration_minutes = duration_ms / 60000
+        target_clips = int(target_cuts_per_minute * duration_minutes)
+        
+        if len(clips) > target_clips:
+            # Need to merge clips
+            return self._merge_clips(clips, target_clips)
+        elif len(clips) < target_clips:
+            # Need to split clips
+            return self._split_clips(clips, target_clips)
+        
+        return clips
+    
+    def _merge_clips(self, clips: List[Any], target_count: int) -> List[Any]:
+        """Merge clips to reduce count"""
+        if target_count <= 0:
+            return clips[:1]
+        
+        merged = []
+        clips_per_group = max(1, len(clips) // target_count)
+        
+        i = 0
+        while i < len(clips) and len(merged) < target_count:
+            group = clips[i:i + clips_per_group]
+            if not group:
+                break
+            
+            # Merge first clip with others
+            base_clip = group[0]
+            total_duration = sum(c.duration for c in group)
+            
+            merged_clip = self._copy_clip(base_clip)
+            merged_clip.duration = total_duration
+            
+            merged.append(merged_clip)
+            i += clips_per_group
+        
+        # Add remaining clips
+        while i < len(clips):
+            merged.append(self._copy_clip(clips[i]))
+            i += 1
+        
+        return merged
+    
+    def _split_clips(self, clips: List[Any], target_count: int) -> List[Any]:
+        """Split clips to increase count"""
+        if not clips or target_count <= len(clips):
+            return clips
+        
+        split = []
+        clips_to_split = target_count - len(clips)
+        
+        for i, clip in enumerate(clips):
+            if i < clips_to_split and clip.duration > 1000:  # Only split if > 1s
+                # Split into two
+                half_duration = clip.duration // 2
+                
+                first_half = self._copy_clip(clip)
+                first_half.duration = half_duration
+                
+                second_half = self._copy_clip(clip)
+                second_half.duration = half_duration
+                second_half.start = clip.start + half_duration
+                second_half.trim_start = clip.trim_start + half_duration
+                
+                split.append(first_half)
+                split.append(second_half)
+            else:
+                split.append(self._copy_clip(clip))
+        
+        return split
+    
+    def _apply_transitions(
+        self,
+        clips: List[Any],
+        transition_style: str
+    ) -> List[Any]:
+        """Apply transition style to clips"""
+        for i, clip in enumerate(clips):
+            if i > 0:  # No transition on first clip
+                transition = self._get_transition(transition_style, i)
+                clip.transitions = [transition]
+        
+        return clips
+    
+    def _get_transition(self, style: str, index: int) -> Dict:
+        """Get transition based on style"""
+        if style == 'dissolve':
+            return {'type': 'dissolve', 'duration': 300}
+        elif style == 'dynamic':
+            transitions = ['zoom', 'glitch', 'whip_pan', 'light_leak']
+            return {
+                'type': transitions[index % len(transitions)],
+                'duration': 200
+            }
+        else:  # cut
+            return {'type': 'cut', 'duration': 0}
+    
+    def _apply_color_grade(
+        self,
+        clips: List[Any],
+        color_grade: Dict[str, float]
+    ) -> List[Any]:
+        """Apply color grade to all clips"""
+        for clip in clips:
+            if not clip.effects:
+                clip.effects = []
+            
+            # Add or update color grade effect
+            clip.effects = [
+                e for e in clip.effects 
+                if e.get('type') != 'color_grade'
+            ]
+            
+            clip.effects.append({
+                'type': 'color_grade',
+                'parameters': color_grade
+            })
+        
+        return clips
+    
+    def _adjust_captions(
+        self,
+        captions: List[Dict],
+        caption_style: str
+    ) -> List[Dict]:
+        """Adjust caption style"""
+        style_presets = {
+            'tiktok_bold': {
+                'font_family': 'Inter',
+                'font_size': 52,
+                'color': '#ffffff',
+                'stroke_color': '#000000',
+                'stroke_width': 3,
+                'background_color': None,
+                'animation': 'pop'
+            },
+            'karaoke': {
+                'font_family': 'Inter',
+                'font_size': 48,
+                'color': '#ffffff',
+                'stroke_color': '#000000',
+                'stroke_width': 2,
+                'background_color': None,
+                'animation': 'word_highlight'
+            },
+            'minimal': {
+                'font_family': 'Inter',
+                'font_size': 36,
+                'color': '#ffffff',
+                'stroke_color': None,
+                'stroke_width': 0,
+                'background_color': None,
+                'animation': 'fade'
+            }
+        }
+        
+        style = style_presets.get(caption_style, style_presets['tiktok_bold'])
+        
+        for caption in captions:
+            caption['style'] = {
+                **caption.get('style', {}),
+                **style
+            }
+        
+        return captions
+    
+    def _adjust_audio_mix(
+        self,
+        audio_tracks: List[Dict],
+        audio_mix: Dict[str, float]
+    ) -> List[Dict]:
+        """Adjust audio mix levels"""
+        if not audio_tracks:
+            return audio_tracks
+        
+        for track in audio_tracks:
+            track_type = track.get('type', '')
+            
+            if track_type == 'voice':
+                track['volume'] = audio_mix.get('voice', 1.0)
+            elif track_type == 'music':
+                track['volume'] = audio_mix.get('music', 0.5)
+            elif track_type == 'sfx':
+                track['volume'] = audio_mix.get('sfx', 0.5)
+        
+        return audio_tracks
+    
+    def _calculate_variant_engagement(
+        self,
+        timeline: DraftTimeline,
+        clip_analyses: List[Any],
+        config: VariantConfig
+    ) -> float:
+        """Calculate engagement score for variant"""
+        base_score = 50.0
+        
+        # Energy arc consistency bonus
+        energy_variance = np.var(config.energy_arc)
+        if config.type == 'safe':
+            # Safe prefers consistent energy
+            base_score += (1 - energy_variance) * 20
+        elif config.type == 'experimental':
+            # Experimental prefers dynamic energy
+            base_score += energy_variance * 30
+        else:
+            # Minimal prefers subtle changes
+            base_score += (1 - energy_variance) * 15
+        
+        # Cut frequency bonus (platform dependent)
+        platform = timeline.metadata.get('platform', 'tiktok')
+        optimal_cuts = {
+            'tiktok': 30,
+            'reels': 20,
+            'youtube_shorts': 25,
+            'youtube': 15,
+            'linkedin': 10,
+            'x': 20
+        }
+        
+        optimal = optimal_cuts.get(platform, 20)
+        cut_diff = abs(config.cut_frequency - optimal)
+        base_score += max(0, 15 - cut_diff)
+        
+        # Clip analysis bonus
+        if clip_analyses:
+            avg_engagement = np.mean([
+                a.engagement_potential for a in clip_analyses
+            ])
+            base_score += avg_engagement * 0.2
+        
+        return min(100, max(0, base_score))
+    
+    def _copy_clip(self, clip: Any) -> Any:
+        """Create a copy of a clip"""
+        from dataclasses import replace
+        if hasattr(clip, '__dataclass_fields__'):
+            return replace(clip)
+        else:
+            return type(clip)(**asdict(clip))
+    
+    def compare_variants(
+        self,
+        variants: List[DraftVariant]
+    ) -> Dict[str, Any]:
+        """
+        Compare variants and provide recommendations
+        
+        Returns:
+            Comparison data with scores and recommendations
+        """
+        if len(variants) != 3:
+            return {'error': 'Expected 3 variants'}
+        
+        comparison = {
+            'variants': [],
+            'recommendation': None,
+            'best_for_engagement': None,
+            'best_for_retention': None
+        }
+        
+        for variant in variants:
+            config = self.VARIANT_CONFIGS[variant.type]
+            
+            variant_data = {
+                'type': variant.type,
+                'name': config.name,
+                'description': config.description,
+                'badge': config.badge,
+                'engagement_score': variant.engagement_score,
+                'clip_count': len(variant.timeline.clips),
+                'cut_frequency': config.cut_frequency,
+                'transition_style': config.transition_style,
+                'strengths': self._get_variant_strengths(variant, config),
+                'best_for': self._get_best_use_cases(variant, config)
+            }
+            
+            comparison['variants'].append(variant_data)
+        
+        # Find best variant
+        best = max(variants, key=lambda v: v.engagement_score)
+        comparison['recommendation'] = best.type
+        comparison['best_for_engagement'] = best.type
+        
+        return comparison
+    
+    def _get_variant_strengths(
+        self,
+        variant: DraftVariant,
+        config: VariantConfig
+    ) -> List[str]:
+        """Get strengths of a variant"""
+        strengths = []
+        
+        if config.type == 'safe':
+            strengths = [
+                'Follows platform best practices',
+                'Consistent pacing keeps viewers engaged',
+                'Professional appearance',
+                'Lower risk of viewer drop-off'
+            ]
+        elif config.type == 'experimental':
+            strengths = [
+                'High energy keeps attention',
+                'Trend-aligned editing style',
+                'More shareable content',
+                'Stands out from competition'
+            ]
+        else:  # minimal
+            strengths = [
+                'Clean and professional look',
+                'Focus on content over effects',
+                'Timeless style',
+                'Better for educational content'
+            ]
+        
+        return strengths
+    
+    def _get_best_use_cases(
+        self,
+        variant: DraftVariant,
+        config: VariantConfig
+    ) -> List[str]:
+        """Get best use cases for variant"""
+        if config.type == 'safe':
+            return [
+                'Brand content',
+                'Product showcases',
+                'General audience content',
+                'First-time creators'
+            ]
+        elif config.type == 'experimental':
+            return [
+                'Trend participation',
+                'Gen Z audience',
+                'Entertainment content',
+                'Viral attempts'
+            ]
+        else:  # minimal
+            return [
+                'Educational content',
+                'Professional services',
+                'B2B content',
+                'Thought leadership'
+            ]
+
+
+def generate_variants_api(
+    intent: Dict[str, Any],
+    clip_analyses: List[Dict]
+) -> Dict[str, Any]:
+    """
+    API-friendly wrapper for variant generation
+    
+    Args:
+        intent: Parsed intent
+        clip_analyses: Clip analysis results
+        
+    Returns:
+        JSON-serializable variants and comparison
+    """
+    service = DraftVariantService()
+    
+    # Convert clip analyses (simplified)
+    analyses = []
+    for data in clip_analyses:
+        # Would properly reconstruct ClipAnalysis objects
+        analyses.append(data)
+    
+    # Generate variants
+    variants = service.generate_all_variants(intent, analyses)
+    
+    # Compare variants
+    comparison = service.compare_variants(variants)
+    
+    # Convert to JSON-serializable format
+    result = {
+        'variants': [],
+        'comparison': comparison
+    }
+    
+    for variant in variants:
+        variant_dict = {
+            'id': variant.id,
+            'type': variant.type,
+            'engagement_score': variant.engagement_score,
+            'created_at': variant.created_at,
+            'timeline': {
+                'duration': variant.timeline.duration,
+                'fps': variant.timeline.fps,
+                'width': variant.timeline.width,
+                'height': variant.timeline.height,
+                'clip_count': len(variant.timeline.clips),
+                'metadata': variant.timeline.metadata
+            }
+        }
+        result['variants'].append(variant_dict)
+    
+    return result
+
+
+if __name__ == "__main__":
+    # Example usage
+    intent = {
+        'target_duration': 60,
+        'platform': 'tiktok',
+        'vibe': 'hype',
+        'energy_level': 'high'
+    }
+    
+    service = DraftVariantService()
+    
+    # Mock clip analyses
+    mock_analyses = []
+    
+    variants = service.generate_all_variants(intent, mock_analyses)
+    
+    print("Generated Variants:")
+    for variant in variants:
+        print(f"\n{variant.type}:")
+        print(f"  Engagement Score: {variant.engagement_score}")
+        print(f"  Clips: {len(variant.timeline.clips)}")
+    
+    comparison = service.compare_variants(variants)
+    print(f"\nRecommendation: {comparison['recommendation']}")
