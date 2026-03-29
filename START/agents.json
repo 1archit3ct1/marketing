@@ -107,7 +107,7 @@
       "phase": "AI Creative Director — Intent Layer",
       "title": "Script-to-video mode",
       "description": "User pastes a script (or types one). AI: (1) Segments script into sentences/beats. (2) Analyzes footage library → matches each script segment to best footage clip by semantic similarity (CLIP embeddings). (3) Builds timeline: footage clip per sentence, duration matched to spoken word count. (4) Generates voiceover via TTS (ElevenLabs API) or prompts user to record. (5) Adds matching captions from script text. Returns full edit. Frontend: side-by-side script + timeline view, click sentence → jump to clip.",
-      "status": "red",
+      "status": "green",
       "files_to_write": ["backend/services/ScriptToVideoService.py", "backend/services/SemanticClipMatchService.py", "backend/services/TTSService.ts", "apps/web/components/ScriptEditor.tsx"]
     },
 
@@ -116,7 +116,7 @@
       "phase": "Moment Graph UI",
       "title": "Moment graph — primary creative interface",
       "description": "Replace timeline-as-primary with Moment Graph: a horizontal card-based view where each card = one scene/moment (auto-detected). Cards show: thumbnail, duration badge, scene label (AI-generated: 'Hook', 'Intro', 'Demo', 'CTA'), engagement prediction score (0-100 bar), audio waveform strip. Drag cards to reorder. Click card → open clip detail panel. Delete card → remove segment. Add card → open B-roll/clip picker. Toggle button: 'Moment View ↔ Timeline View'.",
-      "status": "red",
+      "status": "green",
       "files_to_write": ["apps/web/components/MomentGraph.tsx", "apps/web/components/MomentCard.tsx", "backend/services/SceneSegmentationService.py"]
     },
     {
