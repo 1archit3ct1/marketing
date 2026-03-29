@@ -99,7 +99,7 @@
       "phase": "AI Creative Director — Intent Layer",
       "title": "Voice command editing",
       "description": "Persistent mic button in editor UI. User speaks command → transcribe via Whisper → parse with GPT-4o function calling → execute timeline operation. Supported commands: 'cut the pause at [timecode]', 'make the first 5 seconds faster', 'add a beat drop at the chorus', 'remove the clip where I say um', 'swap the background to something more minimal', 'make the captions bigger', 'shorten this to 30 seconds'. Map each intent to: (1) timeline store mutation, or (2) AI service call, or (3) render parameter change.",
-      "status": "red",
+      "status": "green",
       "files_to_write": ["backend/services/VoiceCommandParser.ts", "backend/services/CommandExecutor.ts", "apps/web/components/VoiceMicButton.tsx"]
     },
     {
