@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-electron/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+
+# Electron
+*.dmg
+*.exe
+*.AppImage
+*.deb
+
+# Expo
+.expo/
+.webpack/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Turbo
+.turbo/
+
+# Lock files (keep pnpm-lock.yaml only)
+package-lock.json
+yarn.lock

@@ -1,0 +1,421 @@
+{
+  "meta": {
+    "product_name": "AURA — AI Creative Director for Social Video",
+    "paradigm_shift": "From track-based timeline editor → Intent-driven AI creative director. The timeline is an output artifact, not the primary interface. You describe what you want to make. AURA drafts it. You steer.",
+    "design_philosophy": [
+      "Creators think in moments and stories — not tracks and keyframes.",
+      "AI handles the craft layer (cuts, color, captions, pacing, transitions) by default.",
+      "Human steers the creative layer (vibe, message, audience, emotion).",
+      "Every feature has an AI-first path and a manual override path.",
+      "The output is always platform-native — not one video exported to 5 platforms, but 5 genuinely different cuts.",
+      "Collaboration is a first-class feature, not an enterprise add-on.",
+      "The editor knows who you are — your brand, your audience, your past performance."
+    ],
+    "what_makes_this_2x_better": [
+      "Intent layer: type or speak what you want → AI generates a full edit draft",
+      "Moment graph replaces timeline as primary interface for non-technical users",
+      "Per-platform smart export: AI re-edits for TikTok vs YouTube natively — different pacing, captions, hooks, aspect ratios",
+      "Brand memory: learns your color palette, font, music taste, caption style from past projects",
+      "Performance feedback loop: imports analytics → understands what cuts/hooks worked → applies to new edits",
+      "Real-time multi-track AI audio mastering, not just volume sliders",
+      "B-roll AI: describes a scene in text → AI finds/generates matching B-roll",
+      "AI script-to-video: paste a script → AI builds an edit from your footage matching the script",
+      "Async collaboration with frame-level comments and suggested edits from team",
+      "Avatar/talking head AI: generate a presenter avatar reading your script if no footage",
+      "Trend intelligence: knows what's performing on each platform this week → suggests hooks, formats, sounds",
+      "Auto-versioning: every save is a named version, branch edits like git",
+      "Voice-command editing: 'cut the pause at 0:42', 'make the hook faster', 'add a beat drop here'"
+    ]
+  },
+
+  "tasks": [
+    {
+      "id": "T001",
+      "phase": "Foundation",
+      "title": "Monorepo scaffold with design system",
+      "description": "Initialize monorepo: apps/web (Next.js 14 App Router), apps/desktop (Tauri shell around web), apps/mobile (Expo), packages/ui (shared component library), packages/types, packages/ai-client. Design system: dark-first, CSS variables for brand color, spacing scale, typography. Font pairing: display (Clash Display or Syne) + body (DM Sans). Color: near-black #0d0d0d bg, #181818 panel, #7c5cfc purple accent (AI actions), #00e5a0 green accent (publishing/live), #f5820a orange CTA.",
+      "status": "green",
+      "files_to_write": ["package.json", "apps/web/", "apps/desktop/", "apps/mobile/", "packages/ui/", "packages/types/", "turbo.json"]
+    },
+    {
+      "id": "T002",
+      "phase": "Foundation",
+      "title": "Project + Auth data model",
+      "description": "DB schema (Postgres): users, projects, clips, tracks, timeline_state (JSONB), brand_profiles, platform_connections, export_jobs, analytics_snapshots, collaboration_sessions, version_history. Auth: Clerk or Supabase Auth with social login (Google, Apple). Row-level security on all project data.",
+      "status": "green",
+      "files_to_write": ["backend/db/schema.sql", "backend/db/migrations/", "backend/auth/"]
+    },
+    {
+      "id": "T003",
+      "phase": "Foundation",
+      "title": "Asset pipeline — ingest, transcode, proxy",
+      "description": "POST /api/ingest: multipart upload → store original to S3/R2 → queue FFmpeg transcode jobs: (1) 720p HLS proxy for preview, (2) audio-only WAV extraction for ASR+beat detection, (3) thumbnail sprite sheet at 1fps. Return asset_id + streaming proxy URL immediately while transcodes complete async. Support: mp4, mov, avi, mkv, webm, mp3, wav, m4a, jpg, png, webp, gif.",
+      "status": "green",
+      "files_to_write": ["backend/services/IngestService.ts", "backend/services/TranscodeWorker.ts", "backend/routes/ingest.ts"]
+    },
+    {
+      "id": "T004",
+      "phase": "Foundation",
+      "title": "Real-time project state sync (CRDT)",
+      "description": "Use Yjs CRDT for real-time collaborative project state. All timeline operations (add clip, trim, move, apply effect) are Yjs mutations broadcast via WebSocket to all collaborators. Offline edits auto-merge on reconnect. Backend: y-websocket server. Frontend: useYjs hook wrapping all store mutations.",
+      "status": "green",
+      "files_to_write": ["backend/collab/YjsServer.ts", "apps/web/hooks/useYjs.ts", "apps/web/store/timelineStore.ts"]
+    },
+    {
+      "id": "T005",
+      "phase": "Foundation",
+      "title": "Version history (git-style branching)",
+      "description": "Every project save creates a named snapshot stored in version_history table (project_id, version_id, timestamp, label, timeline_state JSONB). POST /api/project/version/save, GET /api/project/version/list, POST /api/project/version/restore. Frontend: version history drawer with timeline-style version graph, branch button, restore button.",
+      "status": "green",
+      "files_to_write": ["backend/services/VersionService.ts", "apps/web/components/VersionHistoryDrawer.tsx"]
+    },
+
+    {
+      "id": "T006",
+      "phase": "AI Creative Director — Intent Layer",
+      "title": "Intent input interface",
+      "description": "Primary creation entry point — replaces 'open file and start editing'. Full-screen modal on project create: (1) Upload footage area (drag or phone upload QR). (2) Intent field: text input OR voice recording. Examples: 'Make a 60s TikTok hook from my gym footage, high energy, trending sound', 'YouTube tutorial intro, professional, under 30s'. (3) Platform selector: TikTok / Reels / YouTube Shorts / YouTube / LinkedIn / X. (4) Vibe selector: 5 mood tiles (Hype / Chill / Professional / Funny / Emotional). AI uses all 4 inputs to generate first edit draft.",
+      "status": "red",
+      "files_to_write": ["apps/web/components/IntentModal.tsx", "apps/web/components/VibePicker.tsx", "backend/services/IntentParserService.ts"]
+    },
+    {
+      "id": "T007",
+      "phase": "AI Creative Director — Intent Layer",
+      "title": "AI edit draft generator",
+      "description": "POST /api/ai/generate-draft: accept {intent_text, platform, vibe, asset_ids[]}. Pipeline: (1) IntentParserService → extract: target_duration, energy_level, content_type, key_moments_requested. (2) SceneAnalysisService → analyze all clips: detect faces, action, quality score, audio energy per second. (3) DraftComposerService → select best segments to fill target_duration, order by energy arc (hook → build → payoff), insert auto-cuts on beats, apply platform aspect ratio, apply vibe LUT preset, generate caption track from ASR. (4) Return full timeline_state JSON. Frontend renders draft in preview. User sees: 'Your draft is ready' with 3 variant cards to choose from.",
+      "status": "red",
+      "files_to_write": ["backend/services/IntentParserService.ts", "backend/services/SceneAnalysisService.py", "backend/services/DraftComposerService.py", "backend/routes/ai-draft.ts"]
+    },
+    {
+      "id": "T008",
+      "phase": "AI Creative Director — Intent Layer",
+      "title": "3 draft variants system",
+      "description": "DraftComposerService generates 3 distinct variants per intent: Variant A (safe/proven structure for platform), Variant B (experimental/trend-chasing), Variant C (minimal/clean). Each rendered to 720p preview clip server-side. Frontend: 3 side-by-side preview cards, auto-plays on hover. User clicks one → loads into editor. Or: 'Generate more' → 3 new variants.",
+      "status": "red",
+      "files_to_write": ["backend/services/DraftVariantService.py", "apps/web/components/DraftVariantPicker.tsx"]
+    },
+    {
+      "id": "T009",
+      "phase": "AI Creative Director — Intent Layer",
+      "title": "Voice command editing",
+      "description": "Persistent mic button in editor UI. User speaks command → transcribe via Whisper → parse with GPT-4o function calling → execute timeline operation. Supported commands: 'cut the pause at [timecode]', 'make the first 5 seconds faster', 'add a beat drop at the chorus', 'remove the clip where I say um', 'swap the background to something more minimal', 'make the captions bigger', 'shorten this to 30 seconds'. Map each intent to: (1) timeline store mutation, or (2) AI service call, or (3) render parameter change.",
+      "status": "red",
+      "files_to_write": ["backend/services/VoiceCommandParser.ts", "backend/services/CommandExecutor.ts", "apps/web/components/VoiceMicButton.tsx"]
+    },
+    {
+      "id": "T010",
+      "phase": "AI Creative Director — Intent Layer",
+      "title": "Script-to-video mode",
+      "description": "User pastes a script (or types one). AI: (1) Segments script into sentences/beats. (2) Analyzes footage library → matches each script segment to best footage clip by semantic similarity (CLIP embeddings). (3) Builds timeline: footage clip per sentence, duration matched to spoken word count. (4) Generates voiceover via TTS (ElevenLabs API) or prompts user to record. (5) Adds matching captions from script text. Returns full edit. Frontend: side-by-side script + timeline view, click sentence → jump to clip.",
+      "status": "red",
+      "files_to_write": ["backend/services/ScriptToVideoService.py", "backend/services/SemanticClipMatchService.py", "backend/services/TTSService.ts", "apps/web/components/ScriptEditor.tsx"]
+    },
+
+    {
+      "id": "T011",
+      "phase": "Moment Graph UI",
+      "title": "Moment graph — primary creative interface",
+      "description": "Replace timeline-as-primary with Moment Graph: a horizontal card-based view where each card = one scene/moment (auto-detected). Cards show: thumbnail, duration badge, scene label (AI-generated: 'Hook', 'Intro', 'Demo', 'CTA'), engagement prediction score (0-100 bar), audio waveform strip. Drag cards to reorder. Click card → open clip detail panel. Delete card → remove segment. Add card → open B-roll/clip picker. Toggle button: 'Moment View ↔ Timeline View'.",
+      "status": "red",
+      "files_to_write": ["apps/web/components/MomentGraph.tsx", "apps/web/components/MomentCard.tsx", "backend/services/SceneSegmentationService.py"]
+    },
+    {
+      "id": "T012",
+      "phase": "Moment Graph UI",
+      "title": "Engagement prediction score per moment",
+      "description": "ML model trained on viral video structure patterns. Inputs per moment: position in video (hook penalty if boring), face presence, motion level, audio energy, caption presence, duration. Output: engagement_score 0–100. Display as colored bar on moment card (green=high, yellow=mid, red=low). Hovering shows: 'This moment has low energy — try adding a cut or music drop here.' Backend: EngagementPredictionModel.score(moment_features).",
+      "status": "red",
+      "files_to_write": ["backend/models/EngagementPredictionModel.py", "backend/services/MomentScoringService.py"]
+    },
+    {
+      "id": "T013",
+      "phase": "Moment Graph UI",
+      "title": "AI moment suggestions overlay",
+      "description": "After scoring, AI generates inline suggestions shown as chips on moment cards: 'Add a jump cut here', 'This hook is 4s too slow — trim to 3s', 'Add captions — retention drops 40% without them', 'Beat drop detected at 0:08 — align your cut', 'Your CTA is missing — add one'. Each chip has a one-click 'Apply' button. Backend: MomentAdvisorService calls EngagementPredictionModel + platform trend rules.",
+      "status": "red",
+      "files_to_write": ["backend/services/MomentAdvisorService.ts", "apps/web/components/MomentSuggestionChip.tsx"]
+    },
+
+    {
+      "id": "T014",
+      "phase": "Platform Intelligence",
+      "title": "Platform-native multi-export",
+      "description": "Instead of one video → export to multiple platforms, build platform-native cuts. For each target platform, AI generates a genuinely different edit: TikTok (fast hook in first 1s, captions mandatory, 7-15s or 60s, trending sound), YouTube Shorts (thumbnail-worthy first frame, 60s max, strong verbal CTA), Instagram Reels (aesthetic first frame, 90s max, music-forward), YouTube long-form (slower pace, chapter markers, lower-third titles), LinkedIn (professional tone, no trending sounds, subtitles mandatory). Each platform cut is editable independently.",
+      "status": "red",
+      "files_to_write": ["backend/services/PlatformCutService.py", "backend/config/platform_rules.json", "apps/web/components/PlatformCutManager.tsx"]
+    },
+    {
+      "id": "T015",
+      "phase": "Platform Intelligence",
+      "title": "Trend intelligence feed",
+      "description": "Weekly-updated trend database per platform: trending sounds (TikTok/Reels audio IDs + usage count), trending formats (POV, Get Ready With Me, Day in My Life — detected by analyzing top content), trending caption styles, trending transition types. Backend: TrendCrawlerWorker scrapes platform APIs + public trend APIs weekly → stores in trends DB. In editor: 'What's trending' panel shows: top 5 sounds this week (preview + 'Use this sound'), top 3 formats ('Apply this format to my video'), trending caption style preview.",
+      "status": "red",
+      "files_to_write": ["backend/workers/TrendCrawlerWorker.ts", "backend/services/TrendIntelligenceService.ts", "apps/web/components/TrendFeedPanel.tsx"]
+    },
+    {
+      "id": "T016",
+      "phase": "Platform Intelligence",
+      "title": "Hook analyzer + hook generator",
+      "description": "Hook = first 1-3 seconds. Analyzer: score hook on: face visible Y/N, motion level, audio start (silence penalty), text overlay presence, curiosity gap Y/N. Score 0-100 with breakdown. Generator: if hook score < 60, offer 3 AI-generated alternative hooks: (1) recut existing footage differently, (2) add AI-generated title card with hook text, (3) suggest a verbal hook script to record. Hooks are the #1 retention lever on short-form — this is a top-tier feature.",
+      "status": "red",
+      "files_to_write": ["backend/services/HookAnalyzerService.py", "backend/services/HookGeneratorService.py", "apps/web/components/HookScoreCard.tsx"]
+    },
+
+    {
+      "id": "T017",
+      "phase": "AI Enhancement — Visual",
+      "title": "One-tap AI enhance (auto-everything)",
+      "description": "Single 'Enhance' button in toolbar. Runs full enhancement pipeline in one job, no sliders required: face detection → skin smooth 70% + eye enhance 80% + teeth whiten 50% → person segment → background blur 60% if background is distracting → auto white balance → auto exposure normalize → apply platform-appropriate LUT (vibrant for TikTok/Reels, cinematic for YouTube, natural for LinkedIn) → stabilize if shake detected (RMSE > threshold). Show before/after toggle. User can then manually adjust any slider if desired.",
+      "status": "red",
+      "files_to_write": ["backend/services/AIEnhanceOrchestrator.py", "apps/web/components/OneTabEnhanceButton.tsx"]
+    },
+    {
+      "id": "T018",
+      "phase": "AI Enhancement — Visual",
+      "title": "AI beauty pipeline (all 6 models)",
+      "description": "Per-frame ML beauty pipeline: (1) SkinSmoothModel: frequency separation, bilateral filter strength param. (2) EyeEnhanceModel: sclera brightening, iris contrast. (3) TeethWhitenModel: HSV shift on teeth mask. (4) FaceSlimModel: TPS warp, jaw/cheek contraction. (5) MakeupTransferModel: BeautyGAN-style lip + eye enhancement. (6) HairRetouchModel: hair segmentation + shine boost + flyaway suppression. All models run on GPU, applied to every frame. Batch process entire clip server-side.",
+      "status": "red",
+      "files_to_write": ["backend/models/SkinSmoothModel.py", "backend/models/EyeEnhanceModel.py", "backend/models/TeethWhitenModel.py", "backend/models/FaceSlimModel.py", "backend/models/MakeupTransferModel.py", "backend/models/HairRetouchModel.py"]
+    },
+    {
+      "id": "T019",
+      "phase": "AI Enhancement — Visual",
+      "title": "AI background system (blur + replace + generate)",
+      "description": "3-tier background system: (1) Blur: PersonSegmentModel → gaussian blur bg → composite. (2) Replace from library: 50+ curated background images/loops in categories (studio, nature, office, abstract, gradient). (3) AI-generate: user types prompt → call Stable Diffusion XL with LoRA for consistent style → generate 4 background options → select one → PersonSegmentModel composite. All 3 paths use the same alpha matte from PersonSegmentModel. Edge feathering param for natural compositing.",
+      "status": "red",
+      "files_to_write": ["backend/services/BackgroundSystemService.py", "backend/services/BackgroundGenService.py", "backend/models/PersonSegmentModel.py", "apps/web/components/BackgroundPickerPanel.tsx"]
+    },
+    {
+      "id": "T020",
+      "phase": "AI Enhancement — Visual",
+      "title": "B-roll AI finder + generator",
+      "description": "B-roll panel: (1) Search: type a description ('busy city street at night', 'hands typing on laptop') → search licensed stock video library (Pexels API + Pixabay API) → show results → drag to timeline. (2) AI-match: analyze current clip content via CLIP embeddings → auto-suggest thematically matching B-roll from library. (3) AI-generate: type prompt → generate 3s video clip via RunwayML Gen-3 or Pika API → insert on timeline. All 3 paths deliver a clip asset to the media bin.",
+      "status": "red",
+      "files_to_write": ["backend/services/BRollSearchService.ts", "backend/services/BRollGeneratorService.ts", "apps/web/components/BRollPanel.tsx"]
+    },
+    {
+      "id": "T021",
+      "phase": "AI Enhancement — Visual",
+      "title": "AI talking head / avatar presenter",
+      "description": "If user has no footage or wants a presenter: (1) Avatar library: 20 diverse AI presenter avatars. (2) User uploads one photo → generate talking head video from photo + script using SadTalker or D-ID API. (3) User records 30s reference clip → clone their likeness for future avatar generation. Avatar output = video clip inserted into media bin, compositable with any background. Use cases: faceless channels, product demos, language-dubbed versions.",
+      "status": "red",
+      "files_to_write": ["backend/services/AvatarService.ts", "backend/services/TalkingHeadService.py", "apps/web/components/AvatarGeneratorPanel.tsx"]
+    },
+    {
+      "id": "T022",
+      "phase": "AI Enhancement — Audio",
+      "title": "AI audio master (multi-track intelligent mixer)",
+      "description": "Full AI audio mastering pipeline, not just volume sliders: (1) Voice track: run RNNoise → de-ess → EQ (boost 2-4kHz for clarity, cut mud at 200-400Hz) → gentle compression → normalize to -14 LUFS. (2) Music track: auto-duck music when voice is present (sidechain compression, -12dB duck, 100ms attack/release). (3) SFX track: normalize each SFX to -18 LUFS. (4) Master bus: limit at -1dBTP, target -14 LUFS for streaming platforms. All automated. Visualize: waveform per track with LUFS meter.",
+      "status": "red",
+      "files_to_write": ["backend/services/AIAudioMasterService.py", "backend/services/AudioDSPPipeline.py", "apps/web/components/AudioMasterPanel.tsx"]
+    },
+    {
+      "id": "T023",
+      "phase": "AI Enhancement — Audio",
+      "title": "Voice cloning + multilingual dub",
+      "description": "Voice enhancement layer: (1) Voice clone: user records 30s sample → clone via ElevenLabs or Coqui XTTS → save as voice profile. (2) Multilingual dub: transcribe original audio → translate to target language (DeepL API) → synthesize in cloned voice → replace audio track → auto-generate translated captions. Supported: EN, ES, FR, DE, PT, ZH, JA, KO, AR. Output: same video, new language track + captions. This is a creator monetization multiplier.",
+      "status": "red",
+      "files_to_write": ["backend/services/VoiceCloneService.ts", "backend/services/MultilingualDubService.ts", "apps/web/components/DubLanguagePicker.tsx"]
+    },
+    {
+      "id": "T024",
+      "phase": "AI Enhancement — Audio",
+      "title": "Beat-sync intelligence + music mood matching",
+      "description": "Music system beyond a library: (1) Beat detection: librosa onset_detect on user's video audio → find BPM + beat timestamps. (2) Mood match: analyze video (face emotion, color temperature, motion level) → classify mood → query music library filtered by mood + matching BPM range. (3) Auto-sync cuts: insert cut points on downbeats of selected track. (4) Transition-to-beat: trigger transition effect exactly on beat. (5) Music fade: auto-fade music at video end with smooth 2s fade. Frontend: 'Find music for this vibe' button → shows 5 matched tracks with preview.",
+      "status": "red",
+      "files_to_write": ["backend/services/BeatSyncService.py", "backend/services/MoodMusicMatchService.py", "apps/web/components/MusicRecommendPanel.tsx"]
+    },
+
+    {
+      "id": "T025",
+      "phase": "Caption System",
+      "title": "AI caption engine — word-level animated captions",
+      "description": "Far beyond basic SRT. Pipeline: (1) Whisper large-v3 → word-level timestamps with confidence scores. (2) Caption style presets: TikTok Bold (large white text, black stroke, word-highlight yellow), Minimal (small lowercase, subtle fade), Karaoke (word pops as spoken), Cinematic (bottom-third, fade in/out per line), Meme (Impact font). (3) Word-level animation: each word appears exactly when spoken. (4) Auto-remove filler words (um, uh, like) option. (5) Profanity filter with auto-bleep + asterisk caption. (6) Speaker diarization: different caption color per speaker.",
+      "status": "red",
+      "files_to_write": ["backend/services/CaptionEngineService.py", "backend/services/SpeakerDiarizationService.py", "apps/web/components/CaptionStylePicker.tsx", "apps/web/components/CaptionTrackEditor.tsx"]
+    },
+    {
+      "id": "T026",
+      "phase": "Caption System",
+      "title": "Auto title card + hook text generator",
+      "description": "AI generates on-screen text overlays beyond captions: (1) Hook card: GPT-4o analyzes video intent → generates 3 hook headline options ('You're doing this WRONG…', 'I tried X for 30 days…') → user picks one → animated text card inserted at 0:00. (2) Chapter titles: for videos > 60s, auto-generate chapter title cards at scene transitions. (3) CTA card: at last 5 seconds, insert animated CTA ('Follow for more', 'Link in bio', 'Comment below'). (4) Stat/fact callout: detect when user says a number/stat → auto-generate animated stat card.",
+      "status": "red",
+      "files_to_write": ["backend/services/TitleCardGeneratorService.ts", "apps/web/components/TitleCardEditor.tsx"]
+    },
+
+    {
+      "id": "T027",
+      "phase": "Brand Intelligence",
+      "title": "Brand profile — memory layer",
+      "description": "Brand profile stores everything AURA learns about the creator: brand_colors (hex array), brand_fonts (display + body), preferred_music_genres, preferred_caption_style, preferred_vibe, posting_schedule, platforms, past_LUTs_used, common_intro_clip_id, common_outro_clip_id, logo_asset_id, watermark_position. Auto-populated from first 3 projects (observe and learn). Manual edit always available. All AI draft generation and enhancement uses brand profile as prior context. 'Keep it on-brand' toggle in intent modal.",
+      "status": "red",
+      "files_to_write": ["backend/services/BrandProfileService.ts", "backend/db/models/BrandProfile.ts", "apps/web/components/BrandProfileEditor.tsx"]
+    },
+    {
+      "id": "T028",
+      "phase": "Brand Intelligence",
+      "title": "Intro/outro template system",
+      "description": "Creator defines a reusable intro (e.g. 3s animated logo reveal) and outro (e.g. 5s subscribe card). AURA auto-prepends intro and appends outro to every new project by default (toggle off available). Intro/outro builder: upload logo → pick animation style (slide in, fade, bounce, glitch) → pick music sting → preview → save to brand profile. Outro builder: subscribe button placement, links, end card layout. Output: pre-rendered mp4 asset stored in brand profile assets.",
+      "status": "red",
+      "files_to_write": ["backend/services/IntroOutroService.ts", "apps/web/components/IntroOutroBuilder.tsx"]
+    },
+    {
+      "id": "T029",
+      "phase": "Brand Intelligence",
+      "title": "Performance analytics feedback loop",
+      "description": "Connect platform accounts → import analytics: views, watch time, retention curve (most important), likes, comments, shares per published video. Analytics DB: store retention curves per video_id. ML analysis: correlate edit decisions (cut frequency, caption presence, hook duration, music tempo) with retention at 3s / 15s / 30s / end. Surface insights: 'Your videos with jump cuts in the first 5s retain 42% better at 15s', 'Captions increase your avg watch time by 28%'. Feed these insights back into DraftComposerService as weights.",
+      "status": "red",
+      "files_to_write": ["backend/services/AnalyticsImportService.ts", "backend/services/RetentionAnalysisService.py", "backend/services/InsightGeneratorService.ts", "apps/web/components/AnalyticsDashboard.tsx"]
+    },
+
+    {
+      "id": "T030",
+      "phase": "Timeline Editor (Pro Mode)",
+      "title": "Full timeline editor (power user mode)",
+      "description": "Traditional timeline available as 'Pro Mode' toggle — but modernized: multi-track (V1, V2, V3 video + A1, A2, A3 audio + Caption + Effects). Magnetic snap, ripple edit, slip/slide edits, multi-select. Clip right-click: speed ramp, color grade, replace clip, AI enhance this clip, extract audio, freeze frame. Keyboard shortcuts: J/K/L for playback, I/O for in/out points, C for cut, V for select, B for trim. Waveform display on audio tracks. Zoom: scroll to zoom, pinch on trackpad. Playhead shows frame number + timecode.",
+      "status": "red",
+      "files_to_write": ["apps/web/components/timeline/Timeline.tsx", "apps/web/components/timeline/TrackRow.tsx", "apps/web/components/timeline/ClipBlock.tsx", "apps/web/components/timeline/TimelineRuler.tsx", "apps/web/store/timelineStore.ts"]
+    },
+    {
+      "id": "T031",
+      "phase": "Timeline Editor (Pro Mode)",
+      "title": "Speed ramp editor",
+      "description": "Per-clip speed ramp: visual speed curve editor (like CapCut's curve ramp but better). X-axis = time, Y-axis = speed (0.1x to 10x). Add bezier keypoints for smooth acceleration/deceleration. Presets: 'Hero slow-mo' (1x → 0.1x at impact frame → 1x), 'Hyperlapse' (1x → 4x → 1x), 'Punch zoom' (1x → 0.5x on beat). If speed < 0.5x, auto-trigger optical flow interpolation (RAFT). Preview updates live. Backend: TimeRemapService → RAFT optical flow → re-encode segment.",
+      "status": "red",
+      "files_to_write": ["backend/services/SpeedRampService.py", "backend/models/OpticalFlowModel.py", "apps/web/components/SpeedRampEditor.tsx"]
+    },
+    {
+      "id": "T032",
+      "phase": "Timeline Editor (Pro Mode)",
+      "title": "Color grading suite",
+      "description": "Per-clip color grading panel: (1) Primary corrections: exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, saturation (Lightroom-style). (2) Tone curves: RGB + individual R/G/B channels, bezier curve editor. (3) HSL: hue/saturation/luminance per color range. (4) LUT apply: import .cube LUT files + 30 built-in presets. (5) Color match: select reference frame from another clip → auto-match color grading. (6) Scope: waveform + vectorscope + histogram display. (7) Copy grade → paste to all clips. Backend: FFmpeg filtergraph for color ops, WebGL preview.",
+      "status": "red",
+      "files_to_write": ["apps/web/components/ColorGradePanel.tsx", "apps/web/components/ToneCurveEditor.tsx", "apps/web/components/ScopeDisplay.tsx", "backend/services/ColorGradeService.py"]
+    },
+    {
+      "id": "T033",
+      "phase": "Timeline Editor (Pro Mode)",
+      "title": "Transitions library (AI-matched)",
+      "description": "100+ transitions: cuts, dissolves, wipes, zooms, glitches, light leaks, whip pans, morphs, match cuts. AI-match: detect motion direction at end of clip A and start of clip B → suggest matching transition (e.g. left pan → suggest whip pan transition in same direction). Beat-matched: transitions auto-align to beat when music track is present. Custom transition builder: upload 2 frames, define blend mode + duration + easing. Backend: ShaderTransitionEngine renders transition frames.",
+      "status": "red",
+      "files_to_write": ["backend/services/TransitionMatchService.py", "backend/services/ShaderTransitionEngine.py", "apps/web/components/TransitionLibrary.tsx"]
+    },
+
+    {
+      "id": "T034",
+      "phase": "Collaboration",
+      "title": "Real-time multiplayer editing",
+      "description": "Multiple editors in same project simultaneously: (1) Presence indicators: colored cursors with user name floating on timeline at their playhead position. (2) Conflict resolution: Yjs CRDT auto-merges non-conflicting edits. Conflicting edits (same clip, same time) show a merge dialog. (3) Per-user edit color: each collaborator's clips highlighted in their color on timeline. (4) Live audio: optional WebRTC voice chat channel in-editor for remote editing sessions.",
+      "status": "red",
+      "files_to_write": ["backend/collab/PresenceService.ts", "backend/collab/WebRTCSignaling.ts", "apps/web/components/CollabPresenceBar.tsx"]
+    },
+    {
+      "id": "T035",
+      "phase": "Collaboration",
+      "title": "Frame-level comment + review system",
+      "description": "Share a review link (no account required for reviewer). Reviewer can: (1) Comment at any timecode — comment pins to that frame on timeline. (2) Suggest an edit: 'trim 2s from here' — shows as a suggested edit diff the editor can approve/reject. (3) Draw annotations on the preview frame (arrows, circles, text). (4) React with emoji at a timecode. Editor sees all comments in a sidebar, can jump to each timecode, resolve comments. Backend: comments table (project_id, timecode_ms, user_id, content, annotation_data JSONB, resolved).",
+      "status": "red",
+      "files_to_write": ["backend/services/ReviewService.ts", "backend/routes/review.ts", "apps/web/components/ReviewSidebar.tsx", "apps/web/components/AnnotationCanvas.tsx"]
+    },
+
+    {
+      "id": "T036",
+      "phase": "Publishing",
+      "title": "Smart scheduler + optimal post time",
+      "description": "Scheduling layer: (1) OAuth-connected platform accounts. (2) Post time optimizer: analyze creator's past post performance by day+hour → recommend best posting windows per platform. (3) Calendar UI: month/week view with scheduled posts. (4) Bulk schedule: pick a video → schedule 1 post across 5 platforms at optimal times for each. (5) Queue: 'Add to queue' auto-schedules in optimal slot. Backend: PostSchedulerWorker runs at scheduled time → calls SocialPublishService. Show post status: queued / publishing / live / failed.",
+      "status": "red",
+      "files_to_write": ["backend/services/PostSchedulerWorker.ts", "backend/services/OptimalPostTimeService.ts", "apps/web/components/PublishScheduler.tsx", "apps/web/components/ContentCalendar.tsx"]
+    },
+    {
+      "id": "T037",
+      "phase": "Publishing",
+      "title": "AI metadata generator (title, description, hashtags, thumbnail)",
+      "description": "Before publishing, AI auto-generates: (1) Platform-specific title options (5 variants, A/B test aware): hooks, keywords, length-optimized per platform. (2) Description: video summary + timestamps (for YouTube) + CTAs + links template. (3) Hashtags: trending hashtags for the content category + platform-specific count limits (TikTok 3-5, Instagram 5-10, YouTube 3). (4) Thumbnail: extract 5 best frames (highest face expressiveness score + high contrast) → show as options → AI overlay title text on chosen frame → export as thumbnail. All metadata editable before publish.",
+      "status": "red",
+      "files_to_write": ["backend/services/MetadataGeneratorService.ts", "backend/services/ThumbnailGeneratorService.py", "apps/web/components/PublishMetadataPanel.tsx"]
+    },
+    {
+      "id": "T038",
+      "phase": "Publishing",
+      "title": "A/B thumbnail testing",
+      "description": "YouTube supports thumbnail A/B testing via API. AURA generates 2-3 thumbnail variants → posts all → monitors CTR via YouTube Analytics API → after 48h, auto-selects winner (highest CTR) → sets as permanent thumbnail. Dashboard shows: thumbnail A vs B CTR side-by-side, impressions, click-through rate, winner badge. This is a multi-thousand dollar feature in standalone tools. Include it natively.",
+      "status": "red",
+      "files_to_write": ["backend/services/ThumbnailABTestService.ts", "apps/web/components/ThumbnailABDashboard.tsx"]
+    },
+
+    {
+      "id": "T039",
+      "phase": "Render + Export",
+      "title": "Final render engine",
+      "description": "POST /api/render/final: accept full project timeline_state JSON → FFmpeg-based compositing pipeline: (1) Per-clip: apply color grade (filtergraph) + beauty enhancement (pre-processed frames) + speed ramp + stabilization. (2) Composite: overlay text, captions, stickers with timing. (3) Mix audio: voice + music (auto-ducked) + SFX → master at -14 LUFS. (4) Encode: H.264 or H.265 at platform bitrate target. (5) Output: file to S3 + CDN URL. Show real-time progress bar in UI. ETA estimate. Support render queue for multiple simultaneous projects.",
+      "status": "red",
+      "files_to_write": ["backend/services/RenderEngine.py", "backend/workers/RenderWorker.ts", "backend/routes/render.ts", "apps/web/components/RenderProgressModal.tsx"]
+    },
+    {
+      "id": "T040",
+      "phase": "Render + Export",
+      "title": "Platform-native batch export",
+      "description": "Export one project to all 5 platforms simultaneously, each as a platform-optimized cut: different aspect ratio, different pacing cut, different caption style, different thumbnail, different metadata. Each export job queued independently. Progress shown per platform. User can override any platform's cut before export. Download ZIP option for local storage. Backend: BatchExportQueue → 5 parallel RenderWorker instances → 5 EncoderService instances → 5 SocialPublishService calls.",
+      "status": "red",
+      "files_to_write": ["backend/services/BatchExportService.ts", "apps/web/components/BatchExportPanel.tsx"]
+    },
+
+    {
+      "id": "T041",
+      "phase": "Mobile + Phone Upload",
+      "title": "Phone-to-editor instant upload",
+      "description": "In-editor QR code button → shows QR → user scans on phone → opens mobile upload page (no app install) → select videos from camera roll → upload directly to project. Progress shown on both phone and desktop simultaneously. On mobile: basic trim and select tool so user can pre-select best takes before upload. Backend: presigned S3 upload URL → mobile uploads directly to S3 → webhook notifies editor to refresh media bin. This removes the biggest friction in the creator workflow.",
+      "status": "red",
+      "files_to_write": ["apps/mobile-upload/pages/upload.tsx", "backend/routes/mobile-upload.ts", "apps/web/components/QRUploadModal.tsx"]
+    },
+    {
+      "id": "T042",
+      "phase": "Mobile + Phone Upload",
+      "title": "Mobile editor (Expo) — quick edit mode",
+      "description": "Expo mobile app: not a full editor, but a powerful quick-edit layer. Features: (1) Intent input → generate draft from phone. (2) Moment graph view (cards) — reorder on phone. (3) Caption style picker. (4) Music picker (trend-matched). (5) One-tap enhance. (6) Preview. (7) Publish directly from phone. No timeline — moment graph only on mobile. Designed for the 90% of creators who want to go from footage to published in under 5 minutes.",
+      "status": "red",
+      "files_to_write": ["apps/mobile/screens/HomeScreen.tsx", "apps/mobile/screens/IntentScreen.tsx", "apps/mobile/screens/MomentGraphScreen.tsx", "apps/mobile/screens/PublishScreen.tsx"]
+    },
+
+    {
+      "id": "T043",
+      "phase": "System",
+      "title": "AI job queue + GPU worker pool",
+      "description": "All heavy AI jobs (beauty enhancement, segment, ASR, optical flow, render) go through BullMQ job queue. Worker pool: N GPU workers (configurable). Each worker: pull job → load model (cached in memory) → process → return result → update job status. Job status polling via SSE (Server-Sent Events) → frontend shows real-time progress bars for all AI jobs. Priority queue: preview jobs (low latency) > export jobs > batch jobs.",
+      "status": "red",
+      "files_to_write": ["backend/queue/JobQueue.ts", "backend/workers/GPUWorkerPool.ts", "backend/workers/BaseWorker.ts", "apps/web/hooks/useJobStatus.ts"]
+    },
+    {
+      "id": "T044",
+      "phase": "System",
+      "title": "Template marketplace",
+      "description": "Creator-to-creator template system: (1) Save any project as a template: strips personal footage, keeps structure (clip durations, transitions, caption style, music category, color grade, intro/outro). (2) Publish to marketplace: name, category, preview video, price (free or paid via Stripe). (3) Browse marketplace: filter by platform, vibe, category, price. (4) Apply template: loads structure into new project, prompts user to fill in their own footage in each slot. Revenue share: 70% creator, 30% platform. Backend: TemplateService, Stripe Connect for creator payouts.",
+      "status": "red",
+      "files_to_write": ["backend/services/TemplateService.ts", "backend/services/MarketplaceService.ts", "backend/payments/StripeConnectService.ts", "apps/web/components/TemplateMarketplace.tsx"]
+    },
+    {
+      "id": "T045",
+      "phase": "System",
+      "title": "End-to-end integration + performance hardening",
+      "description": "E2E test: intent → draft → moment graph → enhance → color grade → captions → music → platform cuts → publish. Perf targets: AI draft generation < 30s for 60s clip, enhance pipeline < 2min per clip, ASR < 10s per minute of audio, preview renders at 24fps+ in browser WebGL, export < 2x realtime. Load test: 100 concurrent render jobs. Error boundaries on all AI service calls with graceful fallback to manual mode.",
+      "status": "red",
+      "files_to_write": ["tests/e2e/full_pipeline.test.ts", "tests/load/render_load.test.ts", "backend/middleware/ErrorBoundary.ts"]
+    }
+  ],
+
+  "backend_services_summary": {
+    "AI_tier": ["IntentParserService", "DraftComposerService", "SceneAnalysisService", "EngagementPredictionModel", "MomentAdvisorService", "HookAnalyzerService", "HookGeneratorService", "AIEnhanceOrchestrator", "SkinSmoothModel", "EyeEnhanceModel", "TeethWhitenModel", "FaceSlimModel", "MakeupTransferModel", "HairRetouchModel", "PersonSegmentModel", "BackgroundGenService", "BRollGeneratorService", "AvatarService", "TalkingHeadService", "OpticalFlowModel", "MotionTrackingService", "StabilizationService", "ColorMatchService", "TransitionMatchService"],
+    "Audio_tier": ["AIAudioMasterService", "AudioDSPPipeline", "BeatSyncService", "MoodMusicMatchService", "VoiceCloneService", "MultilingualDubService", "CaptionEngineService", "SpeakerDiarizationService"],
+    "Platform_tier": ["PlatformCutService", "TrendCrawlerWorker", "TrendIntelligenceService", "SocialPublishService", "PostSchedulerWorker", "OptimalPostTimeService", "MetadataGeneratorService", "ThumbnailGeneratorService", "ThumbnailABTestService", "AnalyticsImportService", "RetentionAnalysisService"],
+    "Brand_tier": ["BrandProfileService", "IntroOutroService", "TemplateService", "MarketplaceService"],
+    "Infra_tier": ["IngestService", "TranscodeWorker", "RenderEngine", "RenderWorker", "BatchExportService", "JobQueue", "GPUWorkerPool", "YjsServer", "VersionService", "ReviewService", "PresenceService"]
+  },
+
+  "competitive_gap_analysis": {
+    "vs_CapCut": "CapCut has good AI effects and beat sync. Missing: intent layer, moment graph, per-platform native cuts, performance feedback loop, collaboration, template marketplace, multilingual dub.",
+    "vs_Descript": "Descript has script-to-video and word-level caption editing. Missing: social-first platform intelligence, trend feed, hook analyzer, engagement prediction, brand memory, mobile quick-edit.",
+    "vs_OpusClip": "OpusClip does AI clip selection from long-form. Missing: full editing, beauty enhancement, audio mastering, collaboration, publishing scheduler, B-roll AI, template system.",
+    "vs_Adobe_Premiere": "Premiere has power. Missing: AI creative director, intent layer, social-native workflow, one-tap enhance, trend intelligence, mobile quick-edit, direct publish.",
+    "AURA_unique": ["Intent-to-draft in < 30s", "Engagement prediction per moment", "Per-platform genuinely different cuts", "Performance analytics → edit intelligence feedback loop", "Multilingual voice clone dubbing", "Frame-level async collaboration", "Template marketplace with creator revenue share", "Phone QR upload flow", "A/B thumbnail testing built-in"]
+  }
+}
