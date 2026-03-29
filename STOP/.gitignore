@@ -59,6 +59,15 @@ temp/
 # Turbo
 .turbo/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
 # Lock files (keep pnpm-lock.yaml only)
 package-lock.json
 yarn.lock
